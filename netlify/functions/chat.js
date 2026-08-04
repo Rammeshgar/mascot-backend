@@ -31,9 +31,15 @@ const ai = new GoogleGenAI({
 });
 
 function readRequiredTextFile(filename) {
+    const filePath = path.join(
+        process.cwd(),
+        "netlify",
+        "functions",
+        filename
+    );
+
     try {
-        const fileUrl = new URL(`./${filename}`, import.meta.url);
-        return fs.readFileSync(fileUrl, "utf8").trim();
+        return fs.readFileSync(filePath, "utf8").trim();
     } catch (error) {
         throw new Error(
             `Could not read ${filename}: ${error.message}`
