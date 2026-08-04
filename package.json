@@ -1,0 +1,12 @@
+{
+  "name": "sadeq-mascot-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "@google/genai": "^2.3.0"
+  }
+}
