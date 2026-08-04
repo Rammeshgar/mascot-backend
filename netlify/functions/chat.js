@@ -155,7 +155,7 @@ function sanitizeForSpeech(text) {
         .replace(/[*_#>`~]/g, "")
         .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 900);
+        .slice(0, 550);
 }
 
 function getNumberEnvironmentVariable(
@@ -408,8 +408,8 @@ export const handler = async (event) => {
 
                 generation_config: {
                     thinking_level: "low",
-                    temperature: 0.55,
-                    max_output_tokens: 450,
+                    temperature: 0.45,
+                    max_output_tokens: 220,
                 },
             });
 
