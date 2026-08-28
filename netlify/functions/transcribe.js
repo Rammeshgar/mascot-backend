@@ -69,7 +69,7 @@ export async function handler(event) {
             model,
             contents: [
                 {
-                    text: "Transcribe this spoken question accurately. Return only the words that were spoken, with no label, commentary, quotation marks, or markdown. Preserve the speaker's language.",
+                    text: "Transcribe this spoken question accurately. Return only the words that were clearly spoken, with no label, commentary, quotation marks, or markdown. Preserve the speaker's language. Never infer a question from silence, background noise, room tone, or an unclear recording. If no intelligible speech is present, return exactly [NO_SPEECH].",
                 },
                 { inlineData: { data: audioBase64, mimeType } },
             ],
@@ -83,7 +83,9 @@ export async function handler(event) {
             .trim()
             .replace(/^(["'`])([\s\S]*)\1$/, "$2")
             .trim();
-        if (!transcript) return response(422, { error: "No speech was detected." }, origin);
+        if (!transcript || /^\[?NO[_ ]SPEECH\]?$/i.test(transcript)) {
+            return response(422, { error: "No speech was detected." }, origin);
+        }
         return response(200, { transcript }, origin);
     } catch (error) {
         console.error("Audio transcription error:", error);
