@@ -10,6 +10,8 @@ const ALLOWED_ORIGINS = new Set([
     "https://rammeshgar.github.io",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:4877",
+    "http://127.0.0.1:4877",
 ]);
 
 const geminiApiKey =
