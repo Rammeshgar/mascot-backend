@@ -6,6 +6,8 @@ const ALLOWED_ORIGINS = new Set([
     "http://127.0.0.1:3000",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
+    "http://localhost:4877",
+    "http://127.0.0.1:4877",
 ]);
 
 const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
