@@ -42,6 +42,25 @@ function response(statusCode, body, origin) {
     return { statusCode, headers: corsHeaders(origin), body: JSON.stringify(body) };
 }
 
+function isClearlySilentPcmWav(audioBase64, mimeType) {
+    if (mimeType !== "audio/wav" && mimeType !== "audio/x-wav") return false;
+    try {
+        const audio = Buffer.from(audioBase64, "base64");
+        if (audio.length < 46 || audio.toString("ascii", 0, 4) !== "RIFF" || audio.toString("ascii", 8, 12) !== "WAVE") return false;
+        if (audio.readUInt16LE(20) !== 1 || audio.readUInt16LE(34) !== 16) return false;
+        let energy = 0;
+        let samples = 0;
+        for (let offset = 44; offset + 1 < audio.length; offset += 2) {
+            const normalized = audio.readInt16LE(offset) / 32768;
+            energy += normalized * normalized;
+            samples += 1;
+        }
+        return samples > 0 && Math.sqrt(energy / samples) < 0.006;
+    } catch {
+        return false;
+    }
+}
+
 export async function handler(event) {
     const origin = requestOrigin(event);
     const method = String(event.httpMethod || "GET").toUpperCase();
@@ -63,6 +82,7 @@ export async function handler(event) {
     if (!audioBase64) return response(400, { error: "No audio was received." }, origin);
     if (audioBase64.length > 5_500_000) return response(413, { error: "The recording is too large." }, origin);
     if (!ALLOWED_AUDIO_TYPES.has(mimeType)) return response(415, { error: "Unsupported audio format." }, origin);
+    if (isClearlySilentPcmWav(audioBase64, mimeType)) return response(422, { error: "No speech was detected." }, origin);
 
     try {
         const result = await ai.models.generateContent({
