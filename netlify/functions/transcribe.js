@@ -11,7 +11,7 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const openaiApiKey = process.env.OPENAI_API_KEY || "";
-const transcriptionModel = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
+const TRANSCRIPTION_MODELS = ["gpt-4o-mini-transcribe", "whisper-1"];
 const ALLOWED_AUDIO_TYPES = new Set(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav"]);
 const EXTENSIONS = { "audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav" };
 
@@ -33,6 +33,21 @@ function corsHeaders(origin = "") {
 
 function jsonResponse(statusCode, body, origin = "") {
     return { statusCode, headers: corsHeaders(origin), body: JSON.stringify(body) };
+}
+
+async function requestTranscription(audio, mimeType, model) {
+    const form = new FormData();
+    form.append("model", model);
+    form.append("response_format", "json");
+    form.append("file", new Blob([audio], { type: mimeType }), `question.${EXTENSIONS[mimeType]}`);
+    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiApiKey}` },
+        signal: AbortSignal.timeout(30000),
+        body: form,
+    });
+    const data = await response.json().catch(() => ({}));
+    return { response, data };
 }
 
 export const handler = async (event) => {
@@ -59,18 +74,23 @@ export const handler = async (event) => {
     if (audio.length > 4_500_000) return jsonResponse(413, { error: "The recording is too large. Keep it under 15 seconds." }, origin);
 
     try {
-        const form = new FormData();
-        form.append("model", transcriptionModel);
-        form.append("file", new Blob([audio], { type: mimeType }), `question.${EXTENSIONS[mimeType]}`);
-        const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${openaiApiKey}` },
-            signal: AbortSignal.timeout(30000),
-            body: form,
-        });
-        const data = await response.json().catch(() => ({}));
+        let { response, data } = await requestTranscription(audio, mimeType, TRANSCRIPTION_MODELS[0]);
+
+        if (!response.ok && [400, 403, 404, 500, 502, 503].includes(response.status)) {
+            console.warn(
+                "Primary transcription model unavailable; retrying with fallback:",
+                response.status,
+                data?.error?.code || data?.error?.type || "unknown"
+            );
+            ({ response, data } = await requestTranscription(audio, mimeType, TRANSCRIPTION_MODELS[1]));
+        }
+
         if (!response.ok) {
-            console.error("OpenAI transcription error:", response.status, data?.error?.type || "unknown");
+            console.error(
+                "OpenAI transcription error:",
+                response.status,
+                data?.error?.code || data?.error?.type || "unknown"
+            );
             if (response.status === 429) return jsonResponse(429, { error: "Voice transcription is busy. Please retry shortly." }, origin);
             return jsonResponse(502, { error: "Voice transcription is temporarily unavailable." }, origin);
         }
