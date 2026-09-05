@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { GoogleGenAI } from "@google/genai";
 
 /* -------------------------------------------------------------------------- */
 /* Configuration                                                              */
@@ -14,14 +13,13 @@ const ALLOWED_ORIGINS = new Set([
     "http://127.0.0.1:4877",
 ]);
 
-const geminiApiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
+const openaiApiKey =
+    process.env.OPENAI_API_KEY ||
     "";
 
-const geminiModel =
-    process.env.GEMINI_MODEL ||
-    "gemini-3.6-flash";
+const openaiModel =
+    process.env.OPENAI_MODEL ||
+    "gpt-5.6-luna";
 
 const elevenLabsApiKey =
     process.env.ELEVENLABS_API_KEY ||
@@ -36,9 +34,7 @@ const elevenLabsModel =
     process.env.ELEVENLABS_MODEL_ID ||
     "eleven_flash_v2_5";
 
-const ai = geminiApiKey
-    ? new GoogleGenAI({ apiKey: geminiApiKey })
-    : null;
+
 
 let cachedSystemInstruction = null;
 
@@ -278,7 +274,7 @@ async function createElevenLabsSpeech(text) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Gemini error handling                                                       */
+/* OpenAI error handling                                                       */
 /* -------------------------------------------------------------------------- */
 
 function getErrorStatus(error) {
@@ -351,12 +347,12 @@ export const handler = async (event) => {
         );
     }
 
-    if (!geminiApiKey || !ai) {
+    if (!openaiApiKey) {
         return jsonResponse(
             500,
             {
                 error:
-                    "The server is missing the GEMINI_API_KEY environment variable.",
+                    "The server is missing the OPENAI_API_KEY environment variable.",
             },
             origin
         );
@@ -423,28 +419,35 @@ export const handler = async (event) => {
     }
 
     try {
-        const interaction =
-            await ai.interactions.create({
-                model: geminiModel,
+        const response = await fetch("https://api.openai.com/v1/responses", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(20000),
+            body: JSON.stringify({
+                model: openaiModel,
                 input: message,
-
-                previous_interaction_id:
-                    previousInteractionId ||
-                    undefined,
-
-                system_instruction:
-                    systemInstruction,
-
-                generation_config: {
-                    thinking_level: "low",
-                    temperature: 0.45,
-                    max_output_tokens: 400,
-                },
-            });
-
-        const answer = String(
-            interaction.output_text || ""
-        ).trim();
+                instructions: systemInstruction,
+                // Gemini IDs cannot be continued through OpenAI.
+                previous_response_id: /^resp_[a-zA-Z0-9_-]+$/.test(previousInteractionId || "") ? previousInteractionId : undefined,
+                reasoning: { effort: "low" },
+                max_output_tokens: 1600,
+                store: true
+            })
+        });
+        const interaction = await response.json();
+        if (!response.ok) {
+            const error = new Error("OpenAI request failed.");
+            error.status = response.status;
+            throw error;
+        }
+        if (interaction.status === "incomplete" || interaction.status === "failed") {
+            throw new Error("OpenAI did not complete the response.");
+        }
+        const answer = (interaction.output || [])
+            .filter(item => item.type === "message" && item.role === "assistant")
+            .flatMap(item => item.content || [])
+            .filter(part => part.type === "output_text")
+            .map(part => part.text).join("\n").trim();
 
         const looksTruncated =
             answer &&
@@ -452,14 +455,14 @@ export const handler = async (event) => {
 
         if (looksTruncated) {
             console.warn(
-                "Gemini response may be incomplete:",
+                "OpenAI response may be incomplete:",
                 answer.slice(-100)
             );
         }
 
         if (!answer) {
             throw new Error(
-                "Gemini returned an empty response."
+                "OpenAI returned an empty response."
             );
         }
 
@@ -513,7 +516,7 @@ export const handler = async (event) => {
         );
     } catch (error) {
         console.error(
-            "Gemini API error:",
+            "OpenAI API error:",
             error
         );
 
@@ -525,7 +528,7 @@ export const handler = async (event) => {
                 429,
                 {
                     error:
-                        "The current Gemini quota is exhausted. Please try again later.",
+                        "The current OpenAI quota is exhausted. Please try again later.",
                 },
                 origin
             );
@@ -540,7 +543,7 @@ export const handler = async (event) => {
                 502,
                 {
                     error:
-                        "Gemini rejected the request. Check the API key and selected model.",
+                        "OpenAI rejected the request. Check the API key and selected model.",
                 },
                 origin
             );
@@ -556,3 +559,4 @@ export const handler = async (event) => {
         );
     }
 };
+
