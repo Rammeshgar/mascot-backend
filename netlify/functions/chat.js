@@ -19,7 +19,7 @@ const openaiApiKey =
 
 const openaiModel =
     process.env.OPENAI_MODEL ||
-    "gpt-5.6-luna";
+    "";
 
 const elevenLabsApiKey =
     process.env.ELEVENLABS_API_KEY ||
@@ -32,7 +32,7 @@ const elevenLabsVoiceId =
 const elevenLabsModel =
     process.env.ELEVENLABS_MODEL ||
     process.env.ELEVENLABS_MODEL_ID ||
-    "eleven_flash_v2_5";
+    "";
 
 
 
@@ -347,12 +347,12 @@ export const handler = async (event) => {
         );
     }
 
-    if (!openaiApiKey) {
+    if (!openaiApiKey || !openaiModel) {
         return jsonResponse(
             500,
             {
                 error:
-                    "The server is missing the OPENAI_API_KEY environment variable.",
+                    "The server is missing an OpenAI environment variable.",
             },
             origin
         );
@@ -471,7 +471,8 @@ export const handler = async (event) => {
 
         if (
             elevenLabsApiKey &&
-            elevenLabsVoiceId
+            elevenLabsVoiceId &&
+            elevenLabsModel
         ) {
             try {
                 audioBase64 =
@@ -559,4 +560,3 @@ export const handler = async (event) => {
         );
     }
 };
-
